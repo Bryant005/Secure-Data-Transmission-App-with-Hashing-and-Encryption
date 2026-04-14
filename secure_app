@@ -1,0 +1,130 @@
+import hashlib
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes
+
+# --- 1. User Database and RBAC ---
+USERS = {
+    "bryant": {"password_hash": hashlib.sha256(b"password123").hexdigest(), "role": "admin"},
+    "sonic": {"password_hash": hashlib.sha256(b"userpass").hexdigest(), "role": "user"}
+}
+
+def login():
+    print("--- Secure Data Transmission App ---")
+    username = input("Username: ").strip().lower()
+    password = input("Password: ").strip().encode()
+    
+    user_record = USERS.get(username)
+    if user_record and user_record["password_hash"] == hashlib.sha256(password).hexdigest():
+        print(f"Login successful! Welcome, {username}. Role: {user_record['role']}")
+        return username, user_record["role"]
+    else:
+        print("Authentication failed.")
+        return None, None
+
+# --- 2. Simple Substitution Cipher (Outcome 4.1) ---
+def substitution_cipher(text, shift=3):
+    result = ""
+    for char in text:
+        if char.isalpha():
+            ascii_offset = 65 if char.isupper() else 97
+            result += chr((ord(char) - ascii_offset + shift) % 26 + ascii_offset)
+        else:
+            result += char
+    return result
+
+# --- 3. Cryptographic Operations ---
+def generate_aes_key():
+    # Generates a highly random AES key (using Fernet, which is AES under the hood)
+    return Fernet.generate_key()
+
+def hash_data(data: bytes):
+    # Outcome 4.2: SHA-256 Hash
+    return hashlib.sha256(data).hexdigest()
+
+def encrypt_data(data: bytes, key: bytes):
+    # Symmetric Encryption (AES via Fernet)
+    f = Fernet(key)
+    return f.encrypt(data)
+
+def decrypt_data(encrypted_data: bytes, key: bytes):
+    f = Fernet(key)
+    return f.decrypt(encrypted_data)
+
+def demonstrate_digital_signature(message: bytes):
+    # Outcome 4.3: Digital Signatures using Public/Private Keys
+    print("\n--- Digital Signature Demonstration ---")
+    # Generate RSA keys
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    
+    # Sign the message with Private Key
+    signature = private_key.sign(
+        message,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+    print("Message signed with Private Key.")
+    
+    # Verify the message with Public Key
+    try:
+        public_key.verify(
+            signature,
+            message,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256()
+        )
+        print("Signature verified successfully with Public Key! Authenticity confirmed.")
+    except Exception as e:
+        print("Signature verification failed.")
+
+# --- Main Application Flow ---
+def main():
+    user, role = login()
+    if not user:
+        return
+
+    # Role-Based Access Control Check
+    if role != "admin":
+        print("Access Denied: You must be an 'admin' to transmit secure data.")
+        return
+        
+    print("\nAccess Granted: Proceeding to secure transmission protocol.\n")
+
+    # Step 1: Accept user input
+    original_message = input("Enter a message to secure and transmit: ")
+    message_bytes = original_message.encode()
+
+    # Step 2: Show Substitution Cipher (Just for Outcome 4.1 demonstration)
+    print(f"\n[Demo] Simple Substitution Cipher (Shift 3): {substitution_cipher(original_message)}")
+
+    # Step 3: Hash the input (SHA-256)
+    original_hash = hash_data(message_bytes)
+    print(f"Original SHA-256 Hash: {original_hash}")
+
+    # Step 4: Encrypt the input (AES)
+    aes_key = generate_aes_key()
+    encrypted_message = encrypt_data(message_bytes, aes_key)
+    print(f"Encrypted Message (Ciphertext): {encrypted_message}")
+
+    print("\n--- Transmitting Data --- \n")
+
+    # Step 5: Decrypt the content
+    decrypted_bytes = decrypt_data(encrypted_message, aes_key)
+    decrypted_message = decrypted_bytes.decode()
+    print(f"Decrypted Message: {decrypted_message}")
+
+    # Step 6: Verify integrity via hash comparison
+    new_hash = hash_data(decrypted_bytes)
+    print(f"Post-Decryption SHA-256 Hash: {new_hash}")
+    
+    if original_hash == new_hash:
+        print("Integrity Check: SUCCESS! The data has not been altered.")
+    else:
+        print("Integrity Check: FAILED! The data was tampered with.")
+
+    # Step 7: Demonstrate Digital Signatures
+    demonstrate_digital_signature(message_bytes)
+
+if __name__ == "__main__":
+    main()
